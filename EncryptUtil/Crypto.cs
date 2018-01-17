@@ -9,6 +9,7 @@ namespace EncryptUtil
     {
         private static StringBuilder sb;
         private static string Key { get; set; }
+        private static byte[] salt = new byte[] { 0x49, 0x76, 0x61, 0x6e, 0x20, 0x4d, 0x65, 0x64, 0x76, 0x65, 0x64, 0x65, 0x76 };
 
         /// <summary>
         /// Method that generates a random encryption key
@@ -37,8 +38,8 @@ namespace EncryptUtil
             //Defines cripto object used inside scope
             using (Aes encryptor = Aes.Create())
             {
-                //Required for salt
-                Rfc2898DeriveBytes pdb = new Rfc2898DeriveBytes(Key, new byte[] { 0x49, 0x76, 0x61, 0x6e, 0x20, 0x4d, 0x65, 0x64, 0x76, 0x65, 0x64, 0x65, 0x76 });
+                //Required for salting
+                Rfc2898DeriveBytes pdb = new Rfc2898DeriveBytes(Key, salt);
                 encryptor.Key = pdb.GetBytes(32);
                 encryptor.IV = pdb.GetBytes(16);
                 //Stream that will store encrypted bytes
@@ -50,7 +51,7 @@ namespace EncryptUtil
                         cs.Close();
                     }
 
-                    //Converts to base64string stream byte array
+                    //Converts stream byte array to base64string 
                     sb = new StringBuilder(Convert.ToBase64String(ms.ToArray()));
 
                     //Removes the 2 last padding characters and removes the ones that could mess with URLs
@@ -59,5 +60,41 @@ namespace EncryptUtil
             }
         }
 
+        /// <summary>
+        /// Method that decrypts entered string with previous generated key
+        /// </summary>
+        /// <param name="encrypted">Previously encrypted string</param>
+        /// <returns>Decrypted string</returns>
+        public static string Decrypt(string encrypted)
+        {
+            sb = new StringBuilder(encrypted);
+
+            //Re-insert previous characters for proper decrypting
+            encrypted = sb.Replace("-", "+").Replace("_", "/").Replace(".", "=").Replace(" ", "+")
+                .Insert(encrypted.Length, "==").ToString();
+
+            byte[] cipherBytes = Convert.FromBase64String(encrypted);
+
+            //Defines cripto object used inside scope
+            using (Aes encryptor = Aes.Create())
+            {
+                //Required for salting
+                Rfc2898DeriveBytes pdb = new Rfc2898DeriveBytes(Key, salt);
+                encryptor.Key = pdb.GetBytes(32);
+                encryptor.IV = pdb.GetBytes(16);
+                //Stream that will store decrypted char sequence
+                using (MemoryStream ms = new MemoryStream())
+                {
+                    using (CryptoStream cs = new CryptoStream(ms, encryptor.CreateDecryptor(), CryptoStreamMode.Write))
+                    {
+                        cs.Write(cipherBytes, 0, cipherBytes.Length);
+                        cs.Close();
+                    }
+
+                    //Finally, returns string previously encrypted using the same key
+                    return Encoding.Unicode.GetString(ms.ToArray());
+                }
+            }
+        }
     }
 }
